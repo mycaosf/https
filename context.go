@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"github.com/gorilla/schema"
 	"html"
 	"net/http"
 	"net/url"
-	"reflect"
-	"strconv"
 )
 
 type Context struct {
@@ -45,74 +44,28 @@ func (p *Context) PostForm() url.Values {
 	return p.R.PostForm
 }
 
-//read value from URL or form
+// ReadForm binds the formObject  with the form data
+// it supports any kind of type, including custom structs.
+// It will return nothing if request data are empty.
+// The struct field tag is "form".
+//
+func (p *Context) ReadForm(data interface{}) error {
+	values := p.PostForm()
+	if len(values) == 0 {
+		return nil
+	}
+
+	return decoderForm.Decode(data, values)
+}
+
+// ReadQuery binds the "ptr" with the url query string. The struct field tag is "url".
 func (p *Context) ReadQuery(data interface{}) error {
-	if data == nil {
-		return errDataType
+	values := p.R.URL.Query()
+	if len(values) == 0 {
+		return nil
 	}
 
-	v := reflect.ValueOf(data)
-	if v.Kind() != reflect.Ptr {
-		return errDataType
-	}
-
-	v = reflect.Indirect(v)
-	t := v.Type()
-	r := p.R
-	r.ParseForm()
-	form := r.Form
-
-	for i := 0; i < v.NumField(); i++ {
-		fieldT := t.Field(i)
-		fieldTag := fieldT.Tag.Get("url")
-		if fieldTag == "" || fieldTag == "-" {
-			continue
-		}
-
-		if f := form[fieldTag]; f != nil && f[0] != "" {
-			vf := v.Field(i)
-			s := f[0]
-
-			switch vf.Kind() {
-
-			case reflect.String:
-				vf.SetString(s)
-
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				if n, err := strconv.ParseInt(s, 10, 64); err == nil {
-					vf.SetInt(n)
-				} else {
-					return err
-				}
-
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-				if n, err := strconv.ParseUint(s, 10, 64); err == nil {
-					vf.SetUint(n)
-				} else {
-					return err
-				}
-
-			case reflect.Float32, reflect.Float64:
-				if n, err := strconv.ParseFloat(s, fieldT.Type.Bits()); err == nil {
-					v.SetFloat(n)
-				} else {
-					return err
-				}
-			case reflect.Bool:
-				if n, err := strconv.ParseBool(s); err == nil {
-					v.SetBool(n)
-				} else {
-					return err
-				}
-
-			default:
-				return errUnknownDataType
-			}
-
-		}
-	}
-
-	return nil
+	return decoderQuery.Decode(data, values)
 }
 
 //add header to the response.
@@ -173,9 +126,18 @@ func (p *Context) WriteXML(v interface{}) error {
 	return err
 }
 
+func init() {
+	decoderForm = schema.NewDecoder()
+	decoderQuery = schema.NewDecoder()
+	decoderForm.SetAliasTag("form")
+	decoderQuery.SetAliasTag("url")
+}
+
 var (
 	errUnknownDataType = errors.New("Unknown data type")
 	errDataType        = errors.New("Error data type")
+	decoderForm        *schema.Decoder
+	decoderQuery       *schema.Decoder
 )
 
 const (
