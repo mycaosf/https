@@ -32,6 +32,10 @@ func (p *Context) FormValue(name string) string {
 	return p.R.FormValue(name)
 }
 
+func (p *Context) Query() url.Values {
+	return p.R.URL.Query()
+}
+
 func (p *Context) Form() url.Values {
 	p.R.ParseForm()
 
@@ -50,7 +54,7 @@ func (p *Context) PostForm() url.Values {
 // The struct field tag is "form".
 //
 func (p *Context) ReadForm(data interface{}) error {
-	values := p.PostForm()
+	values := p.Form()
 	if len(values) == 0 {
 		return nil
 	}
@@ -60,7 +64,7 @@ func (p *Context) ReadForm(data interface{}) error {
 
 // ReadQuery binds the "ptr" with the url query string. The struct field tag is "url".
 func (p *Context) ReadQuery(data interface{}) error {
-	values := p.R.URL.Query()
+	values := p.Query()
 	if len(values) == 0 {
 		return nil
 	}
