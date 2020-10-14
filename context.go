@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/gorilla/schema"
 	"html"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 )
@@ -130,6 +131,31 @@ func (p *Context) WriteXML(v interface{}) error {
 	return err
 }
 
+func (p *Context) GetBody() ([]byte, error) {
+	if p.R.Body == nil {
+		return nil, errEmptyBody
+	} else {
+		return ioutil.ReadAll(p.R.Body)
+	}
+}
+
+func (p *Context) UnmarshalBody(v interface{}, unmarshaler UnmarshalerFunc) error {
+	data, err := p.GetBody()
+	if err == nil {
+		err = unmarshaler(data, v)
+	}
+
+	return err
+}
+
+func (p *Context) ReadJSON(v interface{}) error {
+	return p.UnmarshalBody(v, UnmarshalerFunc(json.Unmarshal))
+}
+
+func (p *Context) ReadXML(v interface{}) error {
+	return p.UnmarshalBody(v, UnmarshalerFunc(xml.Unmarshal))
+}
+
 func init() {
 	decoderForm = schema.NewDecoder()
 	decoderQuery = schema.NewDecoder()
@@ -137,9 +163,14 @@ func init() {
 	decoderQuery.SetAliasTag("url")
 }
 
+type (
+	UnmarshalerFunc func(data []byte, v interface{}) error
+)
+
 var (
 	errUnknownDataType = errors.New("Unknown data type")
 	errDataType        = errors.New("Error data type")
+	errEmptyBody       = errors.New("Empty body")
 	decoderForm        *schema.Decoder
 	decoderQuery       *schema.Decoder
 )
