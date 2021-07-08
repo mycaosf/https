@@ -109,14 +109,27 @@ func (p *Context) WriteString(str string) error {
 	return err
 }
 
+func (p *Context) WriteDataJSON(data []byte) error {
+	var buf bytes.Buffer
+	json.HTMLEscape(&buf, data)
+	p.SetHeader(headerTypeContentType, headerTypeContentJSON)
+	_, err := buf.WriteTo(p.W)
+
+	return err
+}
+
 func (p *Context) WriteJSON(v interface{}) error {
 	data, err := json.Marshal(v)
 	if err == nil {
-		var buf bytes.Buffer
-		json.HTMLEscape(&buf, data)
-		p.SetHeader(headerTypeContentType, headerTypeContentJSON)
-		_, err = buf.WriteTo(p.W)
+		err = p.WriteDataJSON(data)
 	}
+
+	return err
+}
+
+func (p *Context) WriteDataXML(data []byte) error {
+	p.SetHeader(headerTypeContentType, headerTypeContentXML)
+	_, err := p.W.Write(data)
 
 	return err
 }
@@ -124,11 +137,15 @@ func (p *Context) WriteJSON(v interface{}) error {
 func (p *Context) WriteXML(v interface{}) error {
 	data, err := xml.Marshal(v)
 	if err == nil {
-		p.SetHeader(headerTypeContentType, headerTypeContentXML)
-		_, err = p.W.Write(data)
+		err = p.WriteDataXML(data)
 	}
 
 	return err
+}
+
+//read header from request
+func (p *Context) GetHeader(name string) string {
+	return p.R.Header.Get(name)
 }
 
 func (p *Context) GetBody() ([]byte, error) {
