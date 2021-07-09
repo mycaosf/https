@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"github.com/gorilla/schema"
 	"html"
 	"io/ioutil"
@@ -23,6 +24,12 @@ func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 
 func (p *Context) NotFound() {
 	http.NotFound(p.W, p.R)
+}
+
+//code should be status code in http package, example: http.StatusContinue
+func (p *Context) Error(code int) {
+	msg := fmt.Sprintf("%d %s", code, http.StatusText(code))
+	http.Error(p.W, msg, code)
 }
 
 func (p *Context) ServeFile(name string) {
