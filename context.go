@@ -8,18 +8,21 @@ import (
 	"fmt"
 	"github.com/gorilla/schema"
 	"html"
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 )
 
 type Context struct {
-	W http.ResponseWriter
-	R *http.Request
+	W      http.ResponseWriter
+	R      *http.Request
+	MaxMem int64 //upload file memory size
 }
 
 func NewContext(w http.ResponseWriter, r *http.Request) *Context {
-	return &Context{W: w, R: r}
+	return &Context{W: w, R: r, MaxMem: 0x4000000}
 }
 
 func (p *Context) NotFound() {
@@ -150,6 +153,19 @@ func (p *Context) WriteXML(v interface{}) error {
 	return err
 }
 
+func (p *Context) WriteHTML(data string) error {
+	p.SetHeader(headerTypeContentType, headerTypeContentHTML)
+
+	return p.WriteString(data)
+}
+
+func (p *Context) WriteText(data string) error {
+	p.SetHeader(headerTypeContentType, headerTypeContentText)
+	_, err := p.Write([]byte(data))
+
+	return err
+}
+
 //read header from request
 func (p *Context) GetHeader(name string) string {
 	return p.R.Header.Get(name)
@@ -180,6 +196,50 @@ func (p *Context) ReadXML(v interface{}) error {
 	return p.UnmarshalBody(v, UnmarshalerFunc(xml.Unmarshal))
 }
 
+func (p *Context) ReadHTML() (string, error) {
+	var str string
+	data, err := p.GetBody()
+	if err == nil {
+		str = html.UnescapeString(string(data))
+	}
+
+	return str, err
+}
+
+func (p *Context) ReadText() (string, error) {
+	var str string
+	data, err := p.GetBody()
+	if err == nil {
+		str = string(data)
+	}
+
+	return str, err
+}
+
+func (p *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
+	if err := p.R.ParseMultipartForm(p.MaxMem); err != nil {
+		return nil, nil, err
+	}
+
+	return p.R.FormFile(key)
+}
+
+func (p *Context) UploadFile(key string, createFile func(string) io.WriteCloser) error {
+	file, info, err := p.FormFile(key)
+	if err == nil {
+		defer file.Close()
+
+		if out := createFile(info.Filename); out != nil {
+			defer out.Close()
+			_, err = io.Copy(out, file)
+		} else {
+			err = errCreateFile
+		}
+	}
+
+	return err
+}
+
 func init() {
 	decoderForm = schema.NewDecoder()
 	decoderQuery = schema.NewDecoder()
@@ -195,6 +255,7 @@ var (
 	errUnknownDataType = errors.New("Unknown data type")
 	errDataType        = errors.New("Error data type")
 	errEmptyBody       = errors.New("Empty body")
+	errCreateFile      = errors.New("Create file failed")
 	decoderForm        *schema.Decoder
 	decoderQuery       *schema.Decoder
 )
@@ -203,4 +264,6 @@ const (
 	headerTypeContentType = "Content-Type"
 	headerTypeContentJSON = "application/json;charset=utf-8"
 	headerTypeContentXML  = "text/xml;charset=utf-8"
+	headerTypeContentHTML = "text/html;charset=utf-8"
+	headerTypeContentText = "text/plain;charset=utf-8"
 )
